@@ -1,0 +1,358 @@
+// ... (Continued from showStudentStatistics)
+
+    private void handleCourseManagement() {
+        System.out.println("\n--- Course Management ---");
+        System.out.println("1. Add Course");
+        System.out.println("2. List All Courses");
+        System.out.println("3. Find Course");
+        System.out.println("4. Update Course");
+        System.out.println("5. Remove Course");
+        
+        int choice = getIntInput("Enter choice: ");
+        
+        switch (choice) {
+            case 1 -> addCourse();
+            case 2 -> listAllCourses();
+            case 3 -> findCourse();
+            case 4 -> updateCourse();
+            case 5 -> removeCourse();
+            default -> System.out.println("Invalid choice.");
+        }
+    } // Closes handleCourseManagement()
+
+    private void addCourse() {
+        try {
+            System.out.println("\n--- Add New Course ---");
+            String code = getStringInput("Course Code (e.g., CS101): ");
+            String title = getStringInput("Course Title: ");
+            int credits = getIntInput("Credits (1-6): ");
+            String department = getStringInput("Department: ");
+            
+            ValidationUtils.validateNotEmpty(code, "Course Code");
+            ValidationUtils.validateNotEmpty(title, "Course Title");
+            ValidationUtils.validateNotEmpty(department, "Department");
+            if (!ValidationUtils.isValidCredits(credits)) {
+                throw new IllegalArgumentException("Credits must be between 1 and 6");
+            }
+
+            // Simple way to get Semester for CLI, defaulting to current
+            Semester semester = Semester.getCurrentSemester();
+            System.out.printf("Current Semester selected: %s%n", semester.getDisplayName());
+
+            Course course = new Course.Builder(code, title, credits)
+                .department(department)
+                .semester(semester)
+                .build();
+            
+            courseService.addCourse(course);
+            
+            System.out.println("Course added successfully!");
+            System.out.println(course);
+            
+        } catch (Exception e) {
+            System.err.println("Error adding course: " + e.getMessage());
+        }
+    }
+
+    private void listAllCourses() {
+        System.out.println("\n--- All Courses ---");
+        List<Course> courses = courseService.getAllCourses();
+        
+        if (courses.isEmpty()) {
+            System.out.println("No courses found.");
+            return;
+        }
+        
+        for (Course course : courses) {
+            System.out.printf("%s - %s (%d credits) - Dept: %s%n", 
+                course.getCode(), course.getTitle(), course.getCredits(), course.getDepartment());
+        }
+        System.out.printf("Total courses: %d%n", courses.size());
+    }
+
+    private void findCourse() {
+        System.out.println("\n--- Find Course ---");
+        String code = getStringInput("Enter Course Code: ");
+        Course course = courseService.findByCode(code);
+        
+        if (course != null) {
+            System.out.println("Course found:");
+            System.out.println(course);
+            System.out.println("Taught in: " + course.getSemester());
+        } else {
+            System.out.println("Course not found.");
+        }
+    }
+
+    private void updateCourse() {
+        String code = getStringInput("Enter Course Code to update: ");
+        Course course = courseService.findByCode(code);
+        
+        if (course == null) {
+            System.out.println("Course not found.");
+            return;
+        }
+        
+        System.out.println("Current details: " + course);
+        System.out.println("Leave blank to keep current value.");
+        
+        // Update Department
+        String department = getStringInput("New Department (" + course.getDepartment() + "): ");
+        if (!department.trim().isEmpty()) {
+            course.setDepartment(department);
+        }
+        
+        // Update Semester (simplified for CLI)
+        System.out.println("Select new Semester:");
+        Semester[] semesters = Semester.values();
+        for (int i = 0; i < semesters.length; i++) {
+            System.out.printf("%d. %s%n", i + 1, semesters[i].getDisplayName());
+        }
+        
+        int semesterChoice = getIntInput("Semester choice (0 to skip): ");
+        if (semesterChoice > 0 && semesterChoice <= semesters.length) {
+            course.setSemester(semesters[semesterChoice - 1]);
+        }
+        
+        courseService.updateCourse(course);
+        System.out.println("Course updated successfully!");
+    }
+
+    private void removeCourse() {
+        String code = getStringInput("Enter Course Code to remove: ");
+        Course course = courseService.findByCode(code);
+        
+        if (course != null) {
+            // Note: In a real system, you'd check for active enrollments before removing.
+            courseService.removeCourse(code);
+            System.out.println("Course removed: " + course.getTitle());
+        } else {
+            System.out.println("Course not found.");
+        }
+    }
+
+    // =====================================================
+    // ENROLLMENT MANAGEMENT
+    // =====================================================
+
+    private void handleEnrollmentManagement() {
+        System.out.println("\n--- Enrollment Management ---");
+        System.out.println("1. Enroll Student in Course");
+        System.out.println("2. Unenroll Student from Course");
+        System.out.println("3. List Student Enrollments");
+        
+        int choice = getIntInput("Enter choice: ");
+        
+        switch (choice) {
+            case 1 -> enrollStudent();
+            case 2 -> unenrollStudent();
+            case 3 -> listStudentEnrollments();
+            default -> System.out.println("Invalid choice.");
+        }
+    }
+
+    private void enrollStudent() {
+        String regNo = getStringInput("Enter Student Registration Number: ");
+        Student student = studentService.findByRegNo(regNo);
+        
+        if (student == null) {
+            System.out.println("Student not found.");
+            return;
+        }
+
+        String courseCode = getStringInput("Enter Course Code to enroll in: ");
+        Course course = courseService.findByCode(courseCode);
+
+        if (course == null) {
+            System.out.println("Course not found.");
+            return;
+        }
+
+        try {
+            student.enrollInCourse(course);
+            System.out.printf("Student %s successfully enrolled in %s.%n", 
+                student.getRegNo(), course.getCode());
+        } catch (DuplicateEnrollmentException | MaxCreditLimitExceededException e) {
+            System.err.println("Enrollment failed: " + e.getMessage());
+        }
+    }
+
+    private void unenrollStudent() {
+        String regNo = getStringInput("Enter Student Registration Number: ");
+        Student student = studentService.findByRegNo(regNo);
+        
+        if (student == null) {
+            System.out.println("Student not found.");
+            return;
+        }
+
+        String courseCode = getStringInput("Enter Course Code to unenroll from: ");
+        if (student.getEnrolledCourses().containsKey(courseCode)) {
+            student.unenrollFromCourse(courseCode);
+            System.out.printf("Student %s successfully unenrolled from %s.%n", 
+                student.getRegNo(), courseCode);
+        } else {
+            System.out.println("Student is not enrolled in that course.");
+        }
+    }
+    
+    private void listStudentEnrollments() {
+        String regNo = getStringInput("Enter Student Registration Number: ");
+        Student student = studentService.findByRegNo(regNo);
+        
+        if (student == null) {
+            System.out.println("Student not found.");
+            return;
+        }
+
+        System.out.printf("\n--- Enrollments for %s (%s) ---%n", 
+            student.getFullName(), student.getRegNo());
+        
+        Map<String, Enrollment> enrollments = student.getEnrolledCourses();
+        if (enrollments.isEmpty()) {
+            System.out.println("No courses currently enrolled.");
+            return;
+        }
+        
+        enrollments.values().forEach(e -> {
+            String gradeInfo = e.getGrade() != null ? e.getGrade().toString() : "N/A";
+            System.out.printf("- %s: %s (Credits: %d, Grade: %s)%n", 
+                e.getCourse().getCode(), e.getCourse().getTitle(), 
+                e.getCourse().getCredits(), gradeInfo);
+        });
+    }
+
+    // =====================================================
+    // GRADE MANAGEMENT
+    // =====================================================
+
+    private void handleGradeManagement() {
+        System.out.println("\n--- Grade Management ---");
+        System.out.println("1. Assign Grade");
+        System.out.println("2. View Student Grades (Report)");
+        
+        int choice = getIntInput("Enter choice: ");
+        
+        switch (choice) {
+            case 1 -> assignGrade();
+            case 2 -> listStudentEnrollments(); // Reusing the list method for viewing grades
+            default -> System.out.println("Invalid choice.");
+        }
+    }
+
+    private void assignGrade() {
+        String regNo = getStringInput("Enter Student Registration Number: ");
+        Student student = studentService.findByRegNo(regNo);
+        
+        if (student == null) {
+            System.out.println("Student not found.");
+            return;
+        }
+
+        String courseCode = getStringInput("Enter Course Code to assign grade: ");
+        Enrollment enrollment = student.getEnrolledCourses().get(courseCode);
+
+        if (enrollment == null) {
+            System.out.println("Student is not enrolled in that course.");
+            return;
+        }
+
+        System.out.println("Available Grades:");
+        Grade[] grades = Grade.values();
+        for (int i = 0; i < grades.length; i++) {
+            System.out.printf("%d. %s%n", i + 1, grades[i]);
+        }
+        
+        int gradeChoice = getIntInput("Enter grade choice: ");
+        if (gradeChoice > 0 && gradeChoice <= grades.length) {
+            Grade selectedGrade = grades[gradeChoice - 1];
+            enrollment.setGrade(selectedGrade);
+            System.out.printf("Grade %s assigned to %s in %s.%n", 
+                selectedGrade.name(), student.getFullName(), courseCode);
+        } else {
+            System.out.println("Invalid grade choice. Grade not assigned.");
+        }
+    }
+
+    // =====================================================
+    // REPORTS
+    // =====================================================
+
+    private void handleReports() {
+        System.out.println("\n--- Reports ---");
+        System.out.println("1. Top Students by GPA");
+        System.out.println("2. Courses by Department");
+        System.out.println("3. Student Academic Record");
+        
+        int choice = getIntInput("Enter choice: ");
+        
+        switch (choice) {
+            case 1 -> showTopStudents();
+            case 2 -> showCoursesByDepartment();
+            case 3 -> showStudentDetails(getStudentByRegNo()); // Reuses a previous method
+            default -> System.out.println("Invalid choice.");
+        }
+    }
+
+    private void showTopStudents() {
+        System.out.println("\n--- Top 10 Students by GPA ---");
+        List<Student> topStudents = studentService.getTopStudents(10);
+        
+        if (topStudents.isEmpty()) {
+            System.out.println("No students with calculated GPA found.");
+            return;
+        }
+        
+        for (int i = 0; i < topStudents.size(); i++) {
+            Student s = topStudents.get(i);
+            System.out.printf("%d. %s (%s) - GPA: %.2f%n", 
+                i + 1, s.getFullName(), s.getRegNo(), s.getStatistics().getGpa());
+        }
+    }
+
+    private void showCoursesByDepartment() {
+        String department = getStringInput("Enter Department Name (e.g., Computer Science): ");
+        List<Course> courses = courseService.findByDepartment(department);
+        
+        if (courses.isEmpty()) {
+            System.out.printf("No courses found for department: %s%n", department);
+            return;
+        }
+        
+        System.out.printf("\n--- Courses in %s Department ---%n", department);
+        courses.forEach(c -> System.out.printf("- %s: %s (%d credits) - %s%n",
+            c.getCode(), c.getTitle(), c.getCredits(), c.getSemester()));
+    }
+    
+    // =====================================================
+    // CLI HELPER METHODS
+    // =====================================================
+    
+    /** Gets a String input from the user. */
+    private String getStringInput(String prompt) {
+        System.out.print(prompt);
+        return scanner.nextLine().trim();
+    }
+    
+    /** Gets an Integer input from the user, handling non-integer errors. */
+    private int getIntInput(String prompt) {
+        int input = -1;
+        System.out.print(prompt);
+        try {
+            input = Integer.parseInt(scanner.nextLine().trim());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid input. Please enter a number.");
+        }
+        return input;
+    }
+    
+    /** Helper method to quickly get a student by Reg No for common tasks */
+    private Student getStudentByRegNo() {
+        String regNo = getStringInput("Enter Student Registration Number: ");
+        Student student = studentService.findByRegNo(regNo);
+        if (student == null) {
+            System.out.println("Student not found.");
+        }
+        return student;
+    }
+} // <-- This is the final closing brace for the public class MainCLI
